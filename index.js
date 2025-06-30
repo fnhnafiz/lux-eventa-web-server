@@ -34,14 +34,75 @@ async function run() {
     const allUsers = db.collection("allUsers");
 
     //when a user sign up and after sign up the user data will be stored in the database
+    // POST /add-user with duplicate email check
     app.post("/add-user", async (req, res) => {
       const user = req.body;
+
+      // Check if user already exists by email
+      const existingUser = await allUsers.findOne({ email: user.email });
+
+      if (existingUser) {
+        return res
+          .status(409)
+          .send({ success: false, message: "User already registered" });
+      }
+
+      // If not exists, insert
       const result = await allUsers.insertOne(user);
-      res.send(result);
+      res.send({
+        success: true,
+        message: "User registered successfully",
+        result,
+      });
     });
-    // app.get("/user", async (req,res)=>{
-    //     const user = await
-    // })
+
+    app.get("/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await allUsers.findOne({ email });
+
+      if (!user) {
+        return res
+          .status(404)
+          .send({ success: false, message: "User not found" });
+      }
+
+      res.send({
+        success: true,
+        user: {
+          name: user.name,
+          email: user.email,
+          photo: user.url,
+        },
+      });
+    });
+
+    // // speciphic user data
+    // Backend login route
+    app.post("/login-user", async (req, res) => {
+      const { email, password } = req.body;
+      const user = await allUsers.findOne({ email });
+      console.log(user);
+      if (!user) {
+        return res
+          .status(404)
+          .send({ success: false, message: "User not found" });
+      }
+
+      if (user.password !== password) {
+        return res
+          .status(401)
+          .send({ success: false, message: "Incorrect password" });
+      }
+      res.send({
+        success: true,
+        message: "Login successful",
+        user: {
+          name: user.name,
+          email: user.email,
+          photo: user.url,
+        },
+      });
+    });
 
     //when a user add event form submit the user event information stored in the luxEvent database.
     app.post("/add-event", async (req, res) => {
@@ -51,7 +112,7 @@ async function run() {
     });
 
     //show
-    app.get("/all-event", async (req, res) => {
+    app.get("/all-events", async (req, res) => {
       const result = await allEvent.find().toArray();
       res.send(result);
     });
@@ -62,7 +123,7 @@ async function run() {
 run().catch(console.dir);
 
 app.get("/", (req, res) => {
-  res.send("job-task is running");
+  res.send(`LuxEventa Server is running on port ${port}`);
 });
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
