@@ -1,6 +1,7 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const express = require("express");
 const cors = require("cors");
+const moment = require("moment");
 const app = express();
 
 require("dotenv").config();
@@ -115,6 +116,130 @@ async function run() {
     app.get("/all-events", async (req, res) => {
       const result = await allEvent.find().toArray();
       res.send(result);
+    });
+
+    // update count
+    app.patch("/update-count/:id", async (req, res) => {
+      const id = req.params.id;
+      const { email } = req.body;
+      // console.log(id, email);
+
+      if (!email) {
+        return res.status(400).send({ error: "Email is required" });
+      }
+
+      try {
+        const event = await allEvent.findOne({ _id: new ObjectId(id) });
+        if (!event) {
+          return res.status(404).send({ error: "Event not found" });
+        }
+
+        if (event.participants && event.participants.includes(email)) {
+          return res.status(400).send({ error: "User already joined" });
+        }
+
+        const result = await allEvent.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $inc: { count: 1 },
+            $push: { participants: email },
+          }
+        );
+
+        if (result.modifiedCount === 1) {
+          res.send({ message: "Join successful" });
+        } else {
+          res.status(500).send({ error: "Failed to update event" });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "Internal server error" });
+      }
+    });
+
+    // searching the title
+    app.get("/events", async (req, res) => {
+      try {
+        const { title, filter, startDate, endDate } = req.query;
+        const query = {};
+
+        // Search by title (case-insensitive, supports partial matches)
+        if (title && title.trim()) {
+          query.title = { $regex: title.trim(), $options: "i" };
+        }
+
+        // Predefined date filters
+        const filters = {
+          today: [moment().startOf("day"), moment().endOf("day")],
+          currentWeek: [moment().startOf("week"), moment().endOf("week")],
+          lastWeek: [
+            moment().subtract(1, "week").startOf("week"),
+            moment().subtract(1, "week").endOf("week"),
+          ],
+          currentMonth: [moment().startOf("month"), moment().endOf("month")],
+          lastMonth: [
+            moment().subtract(1, "month").startOf("month"),
+            moment().subtract(1, "month").endOf("month"),
+          ],
+        };
+
+        // Apply predefined date filter
+        if (filter && filters[filter]) {
+          const [start, end] = filters[filter];
+          query.datetime = {
+            $gte: start.toDate(),
+            $lte: end.toDate(),
+          };
+        }
+        // Apply custom date range filter (takes precedence over predefined filters)
+        else if (startDate && endDate) {
+          const start = moment(startDate).startOf("day");
+          const end = moment(endDate).endOf("day");
+
+          // Validate dates
+          if (!start.isValid() || !end.isValid()) {
+            return res.status(400).send({
+              error: "Invalid date format. Please use ISO date format.",
+            });
+          }
+
+          if (start.isAfter(end)) {
+            return res.status(400).send({
+              error: "Start date cannot be after end date.",
+            });
+          }
+
+          query.datetime = {
+            $gte: start.toDate(),
+            $lte: end.toDate(),
+          };
+        }
+
+        // Execute query with sorting (newest events first)
+        const events = await allEvent
+          .find(query)
+          .sort({ datetime: 1 }) // Sort by datetime ascending (earliest first)
+          .toArray();
+
+        // Add some metadata to the response
+        const response = {
+          events: events,
+          total: events.length,
+          filters: {
+            title: title || null,
+            dateFilter: filter || null,
+            customRange: startDate && endDate ? { startDate, endDate } : null,
+          },
+        };
+
+        res.status(200).json(response);
+      } catch (err) {
+        console.error("Error fetching events:", err);
+        res.status(500).send({
+          error: "Failed to fetch events",
+          message: err.message,
+        });
+      }
     });
   } finally {
   }
