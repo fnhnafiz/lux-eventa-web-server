@@ -23,9 +23,16 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    console.log(
-      `Event Management LuxEventa server running on this PORT ${port}`
-    );
+    const db = client.db("luxEventa-DB");
+    const allEvent = db.collection("allEvent");
+    const allUsers = db.collection("allUsers");
+
+    //when a user sign up and after sign up the user data will be stored in the database
+    app.post("/add-user", async (req, res) => {
+      const user = req.body;
+      const result = await allUsers.insertOne(user);
+      res.send(result);
+    });
   } finally {
   }
 }
