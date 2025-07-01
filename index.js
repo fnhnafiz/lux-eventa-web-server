@@ -316,3 +316,5 @@ run().catch(console.dir);
 app.get("/", (req, res) => {
   res.send(`LuxEventa Server is running on port ${port}`);
 });
+
+module.exports = app;
