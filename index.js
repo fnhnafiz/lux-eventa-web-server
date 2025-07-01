@@ -11,7 +11,7 @@ const port = process.env.PORT || 5000;
 app.use(express.json());
 
 const corsOptions = {
-  origin: ["http://localhost:5173"],
+  origin: ["https://luxeventa.netlify.app"],
   credentials: true,
   optionSuccessStatus: 200,
 };
@@ -78,7 +78,6 @@ async function run() {
     });
 
     // // speciphic user data
-    // Backend login route
     app.post("/login-user", async (req, res) => {
       const { email, password } = req.body;
       const user = await allUsers.findOne({ email });
@@ -106,10 +105,22 @@ async function run() {
     });
 
     //when a user add event form submit the user event information stored in the luxEvent database.
+
     app.post("/add-event", async (req, res) => {
       const event = req.body;
-      const result = await allEvent.insertOne(event);
-      res.send(result);
+      if (!event?.organizerEmail) {
+        return res.status(400).send({ error: "Organizer email is required." });
+      }
+      if (!event?.attendeeCount) {
+        event.attendeeCount = 0;
+      }
+      try {
+        const result = await allEvent.insertOne(event);
+        res.status(201).send(result);
+      } catch (error) {
+        console.error("Error adding event:", error);
+        res.status(500).send({ error: "Failed to add event." });
+      }
     });
 
     //show
@@ -118,7 +129,7 @@ async function run() {
       res.send(result);
     });
 
-    // update count
+    // update count when click to the join button the count will be incremeant
     app.patch("/update-count/:id", async (req, res) => {
       const id = req.params.id;
       const { email } = req.body;
@@ -239,6 +250,61 @@ async function run() {
           error: "Failed to fetch events",
           message: err.message,
         });
+      }
+    });
+
+    // who is posting the Event on their event page
+    app.get("/user-events", async (req, res) => {
+      const { email } = req.query;
+      if (!email) {
+        return res.status(400).send({ error: "User email is required" });
+      }
+      try {
+        const userEvents = await allEvent
+          .find({ organizerEmail: email })
+          .toArray();
+        res.send(userEvents);
+      } catch (err) {
+        res.status(500).send({ error: "Failed to fetch user-specific events" });
+      }
+    });
+
+    // user can update the event when he want.
+    app.put("/update-event/:id", async (req, res) => {
+      const { id } = req.params;
+      const updatedData = req.body;
+
+      try {
+        const result = await allEvent.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedData }
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({ message: "Event updated successfully" });
+        } else {
+          res.status(404).send({ error: "No event found to update" });
+        }
+      } catch (error) {
+        console.error("Update error:", error);
+        res.status(500).send({ error: "Failed to update event" });
+      }
+    });
+
+    app.delete("/delete-event/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        const result = await allEvent.deleteOne({ _id: new ObjectId(id) });
+
+        if (result.deletedCount > 0) {
+          res.send({ message: "Event deleted successfully" });
+        } else {
+          res.status(404).send({ error: "Event not found" });
+        }
+      } catch (error) {
+        console.error("Delete error:", error);
+        res.status(500).send({ error: "Failed to delete event" });
       }
     });
   } finally {
